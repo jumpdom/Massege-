@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Calculator</title>
     
@@ -62,6 +64,7 @@
             const localVideoRef = useRef(null);
             const localStream = useRef(null);
             const chatEndRef = useRef(null);
+            const lastTap = useRef(0);
 
             // WebSocket Connection for Chat
             useEffect(() => {
@@ -87,7 +90,7 @@
                 chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, [messages]);
 
-            // Passcode Screen Logic
+            // Passcode Logic
             const handlePasswordSubmit = (e) => {
                 e.preventDefault();
                 if (password === "jaan") {
@@ -180,12 +183,19 @@
                 setCallState(null);
             };
 
-            // Double Tap Custom Hook / Function Fix
-            const handleDoubleClick = (e) => {
-                e.preventDefault();
-                endCall();
-                if (ws.current) ws.current.close();
-                setScreen('calculator'); // Lock back to calculator immediately
+            // REAL MOBILE DOUBLE TAP FIX (Android optimized using onTouchStart)
+            const handleTouchTap = (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                    return;
+                }
+                
+                const now = Date.now();
+                if (now - lastTap.current < 400) { 
+                    endCall();
+                    if (ws.current) ws.current.close();
+                    setScreen('calculator');
+                }
+                lastTap.current = now;
             };
 
             // SCREENS
@@ -231,12 +241,12 @@
 
             if (screen === 'chat') {
                 return (
-                    <div className="h-full w-full bg-black flex flex-col relative" onDoubleClick={handleDoubleClick}>
+                    <div className="h-full w-full bg-black flex flex-col relative" onTouchStart={handleTouchTap} onClick={handleTouchTap}>
                         {callState && (
                             <div className="absolute inset-0 z-50 bg-black">
                                 <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                                 <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 bg-black/40 backdrop-blur-xl px-6 py-4 rounded-full">
-                                    <button onClick={endCall} className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center">
+                                    <button onClick={endCall} className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center z-50 relative">
                                         <i className="fas fa-phone-slash text-2xl text-white"></i>
                                     </button>
                                 </div>
@@ -253,8 +263,8 @@
                                 </div>
                             </div>
                             <div className="flex gap-3">
-                                <button onClick={() => startCall(false)} className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center"><i className="fas fa-phone text-white"></i></button>
-                                <button onClick={() => startCall(true)} className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center"><i className="fas fa-video text-white"></i></button>
+                                <button onClick={() => startCall(false)} className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center relative z-10"><i className="fas fa-phone text-white"></i></button>
+                                <button onClick={() => startCall(true)} className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center relative z-10"><i className="fas fa-video text-white"></i></button>
                             </div>
                         </div>
 
@@ -274,8 +284,8 @@
                         <div className="p-4 bg-neutral-900 border-t border-neutral-800 pb-8">
                             <div className="flex gap-2">
                                 <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
-                                    placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-3 rounded-full focus:outline-none" />
-                                <button onClick={sendMessage} className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
+                                    placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-3 rounded-full focus:outline-none relative z-10" />
+                                <button onClick={sendMessage} className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center relative z-10">
                                     <i className="fas fa-paper-plane text-white"></i>
                                 </button>
                             </div>

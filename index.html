@@ -6,22 +6,20 @@
     <title>Calculator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background-color: black; overflow: hidden; touch-action: none; user-select: none; }
         #root { width: 100%; height: 100%; }
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-        .animate-shake { animation: shake 0.3s ease-in-out; }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        // Firebase Configuration
+        // Firebase Config
         const firebaseConfig = {
           apiKey: "AIzaSyBHnQxGTZXvSlJj77TWGFJLpPRQm6n_xOU",
           authDomain: "msg-jaan.firebaseapp.com",
@@ -29,11 +27,10 @@
           projectId: "msg-jaan",
           storageBucket: "msg-jaan.firebasestorage.app",
           messagingSenderId: "188484227989",
-          appId: "1:188484227989:web:9e4ddf981d8f71a3ea9c9c",
-          measurementId: "G-PTDBD416S6"
+          appId: "1:188484227989:web:9e4ddf981d8f71a3ea9c9c"
         };
 
-        // Telegram Auto-Alert Configuration
+        // Telegram Auto-Alert Config
         const telegramConfig = {
             botToken: "8866413029:AAEfY0jx9xzoDEc1bMoY9vsBevLLBMkjP2k", 
             chatId: "883139852"     
@@ -46,7 +43,6 @@
         function App() {
             const [screen, setScreen] = useState('password');
             const [password, setPassword] = useState('');
-            const [passwordError, setPasswordError] = useState(false);
             const [display, setDisplay] = useState('0');
             const [prevValue, setPrevValue] = useState(null);
             const [operator, setOperator] = useState(null);
@@ -60,7 +56,6 @@
             const chatEndRef = useRef(null);
             const clickTimeout = useRef(null);
 
-            // Function to send Telegram Alerts
             const sendTelegramAlert = (text) => {
                 const msg = encodeURIComponent(text);
                 const url = `https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage?chat_id=${telegramConfig.chatId}&text=${msg}&parse_mode=Markdown`;
@@ -69,7 +64,6 @@
 
             useEffect(() => {
                 if (screen === 'chat') {
-                    // Send instant notification when secret chat opens
                     sendTelegramAlert("🚨 *Alert:* Jaan online aa gayi hai! Chat screen open ho chuki hai. ❤️");
 
                     const messagesRef = db.ref('messages');
@@ -99,8 +93,10 @@
 
             const handlePasswordSubmit = (e) => {
                 e.preventDefault();
-                if (password === "jaan") { setScreen('calculator'); setPasswordError(false); }
-                else { setPasswordError(true); setPassword(''); setTimeout(() => setPasswordError(false), 500); }
+                if (password.toLowerCase() === "jaan") { 
+                    setScreen('calculator'); 
+                }
+                setPassword('');
             };
 
             const inputDigit = (digit) => {
@@ -129,25 +125,17 @@
 
             const clear = () => { setDisplay('0'); setPrevValue(null); setOperator(null); setWaitingForNewValue(false); };
 
-            const sendMessage = (type = 'text', content = messageInput) => {
-                const textToSend = content.trim();
+            const sendMessage = () => {
+                const textToSend = messageInput.trim();
                 if (!textToSend) return;
                 db.ref('messages').push({
                     sender: 'user',
-                    type: type,
+                    type: 'text',
                     content: textToSend,
                     timestamp: firebase.database.ServerValue.TIMESTAMP
                 });
-                
-                // Send notification on new message
-                sendTelegramAlert(`📩 *Naya Message:* ${type === 'image' ? '📷 Photo' : textToSend}`);
-                
-                if (type === 'text') setMessageInput('');
-            };
-
-            const handlePhotoSend = () => {
-                const url = prompt("Apni Photo ka Link (URL) yahan paste karein:");
-                if (url) sendMessage('image', url);
+                sendTelegramAlert(`📩 *Naya Message:* ${textToSend}`);
+                setMessageInput('');
             };
 
             const startCall = (type) => {
@@ -159,24 +147,13 @@
 
             const endCall = () => { setCallStatus(null); db.ref('currentCall').remove(); };
 
-            const handleScreenClick = (e) => {
-                if (e.target.closest('button') || e.target.closest('input')) return;
-                if (clickTimeout.current) {
-                    clearTimeout(clickTimeout.current);
-                    clickTimeout.current = null;
-                    setScreen('calculator'); 
-                } else {
-                    clickTimeout.current = setTimeout(() => { clickTimeout.current = null; }, 300); 
-                }
-            };
-
             if (screen === 'password') {
                 return (
                     <div className="h-full w-full bg-black flex items-center justify-center">
                         <form onSubmit={handlePasswordSubmit} className="flex flex-col items-center gap-6">
                             <i className="fas fa-lock text-5xl text-neutral-600"></i>
                             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                class="bg-transparent border-b border-neutral-800 text-white text-center text-2xl px-4 py-2 focus:outline-none" placeholder="Passcode" autoFocus />
+                                className="bg-transparent border-b border-neutral-800 text-white text-center text-2xl px-4 py-2 focus:outline-none" placeholder="Passcode" autoFocus />
                         </form>
                     </div>
                 );
@@ -187,19 +164,19 @@
                     <div className="h-full w-full bg-black flex flex-col justify-end p-4 pb-10 max-w-sm mx-auto">
                         <div className="text-white text-7xl font-light text-right mb-6 px-4 truncate">{display}</div>
                         <div className="grid grid-cols-4 gap-3 w-full">
-                            <button onClick={clear} class="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">AC</button>
-                            <button onClick={() => setDisplay(String(parseFloat(display) * -1))} class="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">±</button>
-                            <button onClick={() => setDisplay(String(parseFloat(display) / 100))} class="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">%</button>
-                            <button onClick={() => performOperation('÷')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">÷</button>
-                            {[7, 8, 9].map(num => <button key={num} onClick={() => inputDigit(num)} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button onClick={() => performOperation('×')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">×</button>
-                            {[4, 5, 6].map(num => <button key={num} onClick={() => inputDigit(num)} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button onClick={() => performOperation('-')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">−</button>
-                            {[1, 2, 3].map(num => <button key={num} onClick={() => inputDigit(num)} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button onClick={() => performOperation('+')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">+</button>
-                            <button onClick={inputDigit(0)} class="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2">0</button>
-                            <button onClick={() => { if (!display.includes('.')) setDisplay(display + '.'); }} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">.</button>
-                            <button onClick={handleEquals} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">=</button>
+                            <button type="button" onClick={clear} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">AC</button>
+                            <button type="button" onClick={() => setDisplay(String(parseFloat(display) * -1))} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">±</button>
+                            <button type="button" onClick={() => setDisplay(String(parseFloat(display) / 100))} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">%</button>
+                            <button type="button" onClick={() => performOperation('÷')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">÷</button>
+                            {[7, 8, 9].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
+                            <button type="button" onClick={() => performOperation('×')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">×</button>
+                            {[4, 5, 6].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
+                            <button type="button" onClick={() => performOperation('-')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">−</button>
+                            {[1, 2, 3].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
+                            <button type="button" onClick={() => performOperation('+')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">+</button>
+                            <button type="button" onClick={() => inputDigit(0)} className="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2">0</button>
+                            <button type="button" onClick={() => { if (!display.includes('.')) setDisplay(display + '.'); }} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">.</button>
+                            <button type="button" onClick={handleEquals} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">=</button>
                         </div>
                     </div>
                 );
@@ -207,7 +184,7 @@
 
             if (screen === 'chat') {
                 return (
-                    <div className="h-full w-full bg-black flex flex-col relative" onClick={handleScreenClick}>
+                    <div className="h-full w-full bg-black flex flex-col relative">
                         {callStatus && (
                             <div className="absolute inset-0 bg-neutral-900 z-50 flex flex-col items-center justify-between p-12 text-white">
                                 <div className="text-center mt-10">
@@ -215,7 +192,6 @@
                                     <h2 className="text-2xl font-semibold">My Love</h2>
                                     <p className="text-sm text-neutral-400 mt-2 animate-pulse">{callStatus === 'incoming' ? `Incoming ${callType} Call...` : `Ringing (${callType} Call)...`}</p>
                                 </div>
-                                {callType === 'Video' && <div className="w-64 h-40 bg-zinc-800 rounded-xl flex items-center justify-center border border-neutral-700 text-neutral-500"><i className="fas fa-video text-3xl"></i></div>}
                                 <div className="flex gap-10 mb-10">
                                     {callStatus === 'incoming' && <button onClick={() => setCallStatus('connected')} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone"></i></button>}
                                     <button onClick={endCall} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone-slash"></i></button>
@@ -238,7 +214,7 @@
                             {messages.map((msg, idx) => (
                                 <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${msg.sender === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-neutral-800 text-white rounded-bl-sm'}`}>
-                                        {msg.type === 'image' ? <img src={msg.content} className="max-w-full rounded-lg my-1" alt="Sent" onError={(e)=>{e.target.src="https://placehold.co/200?text=Invalid+Image+URL"}}/> : msg.content}
+                                        {msg.content}
                                     </div>
                                 </div>
                             ))}
@@ -247,11 +223,8 @@
 
                         <div className="p-4 bg-neutral-900 border-t border-neutral-800 pb-8">
                             <div className="flex items-center gap-2">
-                                <button onClick={handlePhotoSend} className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400">
-                                    <i className="fas fa-camera text-lg"></i>
-                                </button>
                                 <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-2.5 rounded-full focus:outline-none" />
-                                <button onClick={() => sendMessage('text')} className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white">
+                                <button onClick={sendMessage} className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white">
                                     <i className="fas fa-paper-plane"></i>
                                 </button>
                             </div>
@@ -260,7 +233,10 @@
                 );
             }
         }
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
     </script>
 </body>
 </html>

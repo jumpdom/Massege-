@@ -43,17 +43,20 @@
         function App() {
             const [screen, setScreen] = useState('password');
             const [password, setPassword] = useState('');
-            const [display, setDisplay] = useState('0');
-            const [prevValue, setPrevValue] = useState(null);
-            const [operator, setOperator] = useState(null);
-            const [waitingForNewValue, setWaitingForNewValue] = useState(false);
             
+            // Calculator State
+            const [display, setDisplay] = useState('0');
+            const [equation, setEquation] = useState('');
+            const [isFinished, setIsFinished] = useState(false);
+            
+            // Chat State
             const [messages, setMessages] = useState([]);
             const [messageInput, setMessageInput] = useState('');
             const [callStatus, setCallStatus] = useState(null); 
             const [callType, setCallType] = useState('');
             
             const chatEndRef = useRef(null);
+            const lastTap = useRef(0); // Mobile double tap handle karne ke liye
 
             const sendTelegramAlert = (text) => {
                 const msg = encodeURIComponent(text);
@@ -102,65 +105,79 @@
                 setPassword('');
             };
 
+            // REAL CALCULATOR LOGIC
             const inputDigit = (digit) => {
-                if (waitingForNewValue) { 
-                    setDisplay(String(digit)); 
-                    setWaitingForNewValue(false); 
-                } else { 
-                    setDisplay(display === '0' ? String(digit) : display + String(digit)); 
+                if (display === '0' || isFinished) {
+                    setDisplay(String(digit));
+                    setIsFinished(false);
+                } else {
+                    setDisplay(display + String(digit));
                 }
             };
 
-            // Real Mathematical Calculation Logic
-            const calculateResult = (first, second, op) => {
-                switch(op) {
-                    case '+': return first + second;
-                    case '-': return first - second;
-                    case '×': return first * second;
-                    case '÷': return second !== 0 ? first / second : 'Error';
-                    default: return second;
+            const inputDecimal = () => {
+                if (isFinished) {
+                    setDisplay('0.');
+                    setIsFinished(false);
+                    return;
                 }
+                if (!display.includes('.')) {
+                    setDisplay(display + '.');
+                }
+            };
+
+            const handleOperator = (op) => {
+                setEquation(display + ' ' + op + ' ');
+                setIsFinished(true);
             };
 
             const handleEquals = () => {
-                if (display === '143') { 
-                    setScreen('chat'); 
-                    clear(); 
-                    return; 
+                // Secret Code Check
+                if (display === '143') {
+                    setScreen('chat');
+                    clear();
+                    return;
                 }
-                
-                if (operator && prevValue !== null) {
-                    const currentVal = parseFloat(display);
-                    const result = calculateResult(prevValue, currentVal, operator);
-                    setDisplay(String(result));
-                    setPrevValue(null);
-                    setOperator(null);
-                    setWaitingForNewValue(true);
-                }
-            };
 
-            const performOperation = (nextOperator) => {
-                const inputValue = parseFloat(display);
-                
-                if (prevValue === null) { 
-                    setPrevValue(inputValue); 
-                } else if (operator && !waitingForNewValue) {
-                    const result = calculateResult(prevValue, inputValue, operator);
-                    setPrevValue(result);
+                if (!equation) return;
+
+                try {
+                    let finalExpression = equation + display;
+                    // Replace math symbols for eval
+                    finalExpression = finalExpression.replaceAll('×', '*').replaceAll('÷', '/');
+                    
+                    let result = eval(finalExpression);
+                    
+                    // Round if decimal to avoid long javascript precision errors
+                    if (result % 1 !== 0) {
+                        result = parseFloat(result.toFixed(6));
+                    }
+
                     setDisplay(String(result));
+                    setEquation('');
+                    setIsFinished(true);
+                } catch (e) {
+                    setDisplay('Error');
+                    setEquation('');
+                    setIsFinished(true);
                 }
-                
-                setWaitingForNewValue(true); 
-                setOperator(nextOperator);
             };
 
             const clear = () => { 
                 setDisplay('0'); 
-                setPrevValue(null); 
-                setOperator(null); 
-                setWaitingForNewValue(false); 
+                setEquation('');
+                setIsFinished(false);
             };
 
+            const handleToggleSign = () => {
+                setDisplay(String(parseFloat(display) * -1));
+            };
+
+            const handlePercentage = () => {
+                setDisplay(String(parseFloat(display) / 100));
+            };
+
+            // CHAT FUNCTIONS
             const sendMessage = () => {
                 const textToSend = messageInput.trim();
                 if (!textToSend) return;
@@ -183,13 +200,20 @@
 
             const endCall = () => { setCallStatus(null); db.ref('currentCall').remove(); };
 
-            // Kahin par bhi double click karne par safe exit handler
-            const handleAnywhereDoubleClick = () => {
-                db.ref('messages').remove();
-                db.ref('currentCall').remove();
-                sendTelegramAlert("🔒 *Safe Exit:* Screen par double click karke chat ko secure kiya gaya.");
-                setScreen('calculator');
-                clear();
+            // MOBILE FRIENDLY PROPER DUAL TAP TO EXIT
+            const handleMobileDoubleTap = () => {
+                const now = Date.now();
+                const DOUBLE_PRESS_DELAY = 300; // 300ms window for double tap
+                if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
+                    // Safe Exit Logic Triggered
+                    db.ref('messages').remove();
+                    db.ref('currentCall').remove();
+                    sendTelegramAlert("🔒 *Safe Exit:* Screen par double tap karke chat ko secure kiya gaya.");
+                    setScreen('calculator');
+                    clear();
+                } else {
+                    lastTap.current = now;
+                }
             };
 
             if (screen === 'password') {
@@ -207,20 +231,25 @@
             if (screen === 'calculator') {
                 return (
                     <div className="h-full w-full bg-black flex flex-col justify-end p-4 pb-10 max-w-sm mx-auto">
+                        <div className="text-neutral-500 text-sm text-right px-4 h-6 truncate">{equation}</div>
                         <div className="text-white text-7xl font-light text-right mb-6 px-4 truncate">{display}</div>
                         <div className="grid grid-cols-4 gap-3 w-full">
                             <button type="button" onClick={clear} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">AC</button>
-                            <button type="button" onClick={() => setDisplay(String(parseFloat(display) * -1))} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">±</button>
-                            <button type="button" onClick={() => setDisplay(String(parseFloat(display) / 100))} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">%</button>
-                            <button type="button" onClick={() => performOperation('÷')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">÷</button>
+                            <button type="button" onClick={handleToggleSign} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">±</button>
+                            <button type="button" onClick={handlePercentage} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">%</button>
+                            <button type="button" onClick={() => handleOperator('÷')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">÷</button>
+                            
                             {[7, 8, 9].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button type="button" onClick={() => performOperation('×')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">×</button>
+                            <button type="button" onClick={() => handleOperator('×')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">×</button>
+                            
                             {[4, 5, 6].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button type="button" onClick={() => performOperation('-')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">−</button>
+                            <button type="button" onClick={() => handleOperator('-')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">−</button>
+                            
                             {[1, 2, 3].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button type="button" onClick={() => performOperation('+')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">+</button>
+                            <button type="button" onClick={() => handleOperator('+')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">+</button>
+                            
                             <button type="button" onClick={() => inputDigit(0)} className="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2">0</button>
-                            <button type="button" onClick={() => { if (!display.includes('.')) setDisplay(display + '.'); }} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">.</button>
+                            <button type="button" onClick={inputDecimal} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">.</button>
                             <button type="button" onClick={handleEquals} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">=</button>
                         </div>
                     </div>
@@ -229,8 +258,8 @@
 
             if (screen === 'chat') {
                 return (
-                    /* SCREEN PAR KAHIN BHI DOUBLE CLICK KARNE SE EXIT HO JAYEGA */
-                    <div onDoubleClick={handleAnywhereDoubleClick} className="h-full w-full bg-black flex flex-col relative select-none">
+                    /* DUAL TAP RE-ENGINEERED FOR MOBILE PHONES */
+                    <div onClick={handleMobileDoubleTap} className="h-full w-full bg-black flex flex-col relative select-none">
                         {callStatus && (
                             <div className="absolute inset-0 bg-neutral-900 z-50 flex flex-col items-center justify-between p-12 text-white">
                                 <div className="text-center mt-10">
@@ -268,7 +297,7 @@
                         </div>
 
                         <div className="p-4 bg-neutral-900 border-t border-neutral-800 pb-8">
-                            <div onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
+                            <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
                                 <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-2.5 rounded-full focus:outline-none" />
                                 <button onClick={sendMessage} className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white">
                                     <i className="fas fa-paper-plane"></i>

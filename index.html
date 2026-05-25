@@ -30,10 +30,10 @@
           appId: "1:188484227989:web:9e4ddf981d8f71a3ea9c9c"
         };
 
-        // Telegram Auto-Alert Config
+        // Telegram Fixed Config (Sahi Chat ID ke sath)
         const telegramConfig = {
             botToken: "8866413029:AAEfY0jx9xzoDEc1bMoY9vsBevLLBMkjP2k", 
-            chatId: "883139852"     
+            chatId: "8831398352"     
         };
 
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -54,7 +54,6 @@
             const [callType, setCallType] = useState('');
             
             const chatEndRef = useRef(null);
-            const clickTimeout = useRef(null);
 
             const sendTelegramAlert = (text) => {
                 const msg = encodeURIComponent(text);

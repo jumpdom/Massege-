@@ -30,7 +30,7 @@
           appId: "1:188484227989:web:9e4ddf981d8f71a3ea9c9c"
         };
 
-        // Telegram Config (Aapki Sahi Chat ID ke sath)
+        // Telegram Config
         const telegramConfig = {
             botToken: "8866413029:AAEfY0jx9xzoDEc1bMoY9vsBevLLBMkjP2k", 
             chatId: "8831398352"     
@@ -71,7 +71,7 @@
                         if (data) {
                             setMessages(Object.keys(data).map(key => data[key]));
                         } else {
-                            setMessages([]); // Agar database se delete ho jaye toh web par bhi turant chat khali ho jaye
+                            setMessages([]); 
                         }
                     });
 
@@ -103,30 +103,63 @@
             };
 
             const inputDigit = (digit) => {
-                if (waitingForNewValue) { setDisplay(String(digit)); setWaitingForNewValue(false); }
-                else { setDisplay(display === '0' ? String(digit) : display + String(digit)); }
+                if (waitingForNewValue) { 
+                    setDisplay(String(digit)); 
+                    setWaitingForNewValue(false); 
+                } else { 
+                    setDisplay(display === '0' ? String(digit) : display + String(digit)); 
+                }
+            };
+
+            // Real Mathematical Calculation Logic
+            const calculateResult = (first, second, op) => {
+                switch(op) {
+                    case '+': return first + second;
+                    case '-': return first - second;
+                    case '×': return first * second;
+                    case '÷': return second !== 0 ? first / second : 'Error';
+                    default: return second;
+                }
             };
 
             const handleEquals = () => {
-                if (display === '143') { setScreen('chat'); clear(); return; }
-                performOperation(null); setPrevValue(null);
+                if (display === '143') { 
+                    setScreen('chat'); 
+                    clear(); 
+                    return; 
+                }
+                
+                if (operator && prevValue !== null) {
+                    const currentVal = parseFloat(display);
+                    const result = calculateResult(prevValue, currentVal, operator);
+                    setDisplay(String(result));
+                    setPrevValue(null);
+                    setOperator(null);
+                    setWaitingForNewValue(true);
+                }
             };
 
             const performOperation = (nextOperator) => {
                 const inputValue = parseFloat(display);
-                if (prevValue === null) { setPrevValue(inputValue); }
-                else if (operator) {
-                    let newValue = prevValue;
-                    if (operator === '+') newValue += inputValue;
-                    if (operator === '-') newValue -= inputValue;
-                    if (operator === '×') newValue *= inputValue;
-                    if (operator === '÷') newValue /= inputValue;
-                    setPrevValue(newValue); setDisplay(String(newValue));
+                
+                if (prevValue === null) { 
+                    setPrevValue(inputValue); 
+                } else if (operator && !waitingForNewValue) {
+                    const result = calculateResult(prevValue, inputValue, operator);
+                    setPrevValue(result);
+                    setDisplay(String(result));
                 }
-                setWaitingForNewValue(true); setOperator(nextOperator);
+                
+                setWaitingForNewValue(true); 
+                setOperator(nextOperator);
             };
 
-            const clear = () => { setDisplay('0'); setPrevValue(null); setOperator(null); setWaitingForNewValue(false); };
+            const clear = () => { 
+                setDisplay('0'); 
+                setPrevValue(null); 
+                setOperator(null); 
+                setWaitingForNewValue(false); 
+            };
 
             const sendMessage = () => {
                 const textToSend = messageInput.trim();
@@ -150,16 +183,11 @@
 
             const endCall = () => { setCallStatus(null); db.ref('currentCall').remove(); };
 
-            // Secret Double Click Handler (Header par do baar click karne par)
-            const handleHeaderDoubleClick = () => {
-                // 1. Database se saare messages delete karo
+            // Kahin par bhi double click karne par safe exit handler
+            const handleAnywhereDoubleClick = () => {
                 db.ref('messages').remove();
                 db.ref('currentCall').remove();
-                
-                // 2. Telegram par safe exit ka notification bhej do
-                sendTelegramAlert("🔒 *Safe Exit:* Chat band karke saare messages delete kar diye gaye hain aur calculator lock ho gaya hai.");
-
-                // 3. Wapas calculator screen par bhejo aur clear karo
+                sendTelegramAlert("🔒 *Safe Exit:* Screen par double click karke chat ko secure kiya gaya.");
                 setScreen('calculator');
                 clear();
             };
@@ -191,7 +219,7 @@
                             <button type="button" onClick={() => performOperation('-')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">−</button>
                             {[1, 2, 3].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
                             <button type="button" onClick={() => performOperation('+')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">+</button>
-                            <button type="button" onClick={inputDigit(0)} className="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2">0</button>
+                            <button type="button" onClick={() => inputDigit(0)} className="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2">0</button>
                             <button type="button" onClick={() => { if (!display.includes('.')) setDisplay(display + '.'); }} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">.</button>
                             <button type="button" onClick={handleEquals} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">=</button>
                         </div>
@@ -201,7 +229,8 @@
 
             if (screen === 'chat') {
                 return (
-                    <div className="h-full w-full bg-black flex flex-col relative">
+                    /* SCREEN PAR KAHIN BHI DOUBLE CLICK KARNE SE EXIT HO JAYEGA */
+                    <div onDoubleClick={handleAnywhereDoubleClick} className="h-full w-full bg-black flex flex-col relative select-none">
                         {callStatus && (
                             <div className="absolute inset-0 bg-neutral-900 z-50 flex flex-col items-center justify-between p-12 text-white">
                                 <div className="text-center mt-10">
@@ -210,14 +239,13 @@
                                     <p className="text-sm text-neutral-400 mt-2 animate-pulse">{callStatus === 'incoming' ? `Incoming ${callType} Call...` : `Ringing (${callType} Call)...`}</p>
                                 </div>
                                 <div className="flex gap-10 mb-10">
-                                    {callStatus === 'incoming' && <button onClick={() => setCallStatus('connected')} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone"></i></button>}
-                                    <button onClick={endCall} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone-slash"></i></button>
+                                    {callStatus === 'incoming' && <button onClick={(e) => { e.stopPropagation(); setCallStatus('connected'); }} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone"></i></button>}
+                                    <button onClick={(e) => { e.stopPropagation(); endCall(); }} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone-slash"></i></button>
                                 </div>
                             </div>
                         )}
 
-                        {/* DOUBLE CLICK DETECTOR ADDED ON THIS HEADER */}
-                        <div onDoubleClick={handleHeaderDoubleClick} className="bg-neutral-900 p-4 pt-10 flex items-center justify-between border-b border-neutral-800 cursor-pointer select-none">
+                        <div className="bg-neutral-900 p-4 pt-10 flex items-center justify-between border-b border-neutral-800">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">M</div>
                                 <div><div className="text-white font-medium">My Love</div><div className="text-xs text-green-500">Online</div></div>
@@ -240,7 +268,7 @@
                         </div>
 
                         <div className="p-4 bg-neutral-900 border-t border-neutral-800 pb-8">
-                            <div className="flex items-center gap-2">
+                            <div onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
                                 <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-2.5 rounded-full focus:outline-none" />
                                 <button onClick={sendMessage} className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white">
                                     <i className="fas fa-paper-plane"></i>

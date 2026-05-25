@@ -3,21 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#000000">
     <title>Calculator</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background-color: black; overflow: hidden; touch-action: none; user-select: none; }
         #root { width: 100%; height: 100%; }
@@ -27,8 +20,8 @@
 </head>
 <body>
     <div id="root"></div>
-
     <script type="text/babel">
+        // Firebase Configuration
         const firebaseConfig = {
           apiKey: "AIzaSyBHnQxGTZXvSlJj77TWGFJLpPRQm6n_xOU",
           authDomain: "msg-jaan.firebaseapp.com",
@@ -40,18 +33,20 @@
           measurementId: "G-PTDBD416S6"
         };
 
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.database();
+        // Telegram Auto-Alert Configuration
+        const telegramConfig = {
+            botToken: "8866413029:AAEfY0jx9xzoDEc1bMoY9vsBevLLBMkjP2k", 
+            chatId: "883139852"     
+        };
 
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
         const { useState, useEffect, useRef } = React;
 
         function App() {
             const [screen, setScreen] = useState('password');
             const [password, setPassword] = useState('');
             const [passwordError, setPasswordError] = useState(false);
-            
             const [display, setDisplay] = useState('0');
             const [prevValue, setPrevValue] = useState(null);
             const [operator, setOperator] = useState(null);
@@ -59,107 +54,120 @@
             
             const [messages, setMessages] = useState([]);
             const [messageInput, setMessageInput] = useState('');
+            const [callStatus, setCallStatus] = useState(null); 
+            const [callType, setCallType] = useState('');
+            
             const chatEndRef = useRef(null);
-            const lastTap = useRef(0);
+            const clickTimeout = useRef(null);
+
+            // Function to send Telegram Alerts
+            const sendTelegramAlert = (text) => {
+                const msg = encodeURIComponent(text);
+                const url = `https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage?chat_id=${telegramConfig.chatId}&text=${msg}&parse_mode=Markdown`;
+                fetch(url).catch(err => console.log(err));
+            };
 
             useEffect(() => {
                 if (screen === 'chat') {
+                    // Send instant notification when secret chat opens
+                    sendTelegramAlert("🚨 *Alert:* Jaan online aa gayi hai! Chat screen open ho chuki hai. ❤️");
+
                     const messagesRef = db.ref('messages');
                     messagesRef.on('value', (snapshot) => {
                         const data = snapshot.val();
-                        if (data) {
-                            const list = Object.keys(data).map(key => data[key]);
-                            setMessages(list);
+                        if (data) setMessages(Object.keys(data).map(key => data[key]));
+                    });
+
+                    const callRef = db.ref('currentCall');
+                    callRef.on('value', (snapshot) => {
+                        const callData = snapshot.val();
+                        if (callData && callData.status === 'active') {
+                            if (callData.by === 'admin') {
+                                setCallStatus('incoming');
+                                setCallType(callData.type);
+                            }
+                        } else {
+                            setCallStatus(null);
                         }
                     });
-                    return () => messagesRef.off();
+
+                    return () => { messagesRef.off(); callRef.off(); };
                 }
             }, [screen]);
 
-            useEffect(() => {
-                chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, [messages]);
+            useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
             const handlePasswordSubmit = (e) => {
                 e.preventDefault();
-                if (password === "jaan") {
-                    setScreen('calculator');
-                    setPasswordError(false);
-                } else {
-                    setPasswordError(true);
-                    setPassword('');
-                    setTimeout(() => setPasswordError(false), 500);
-                }
+                if (password === "jaan") { setScreen('calculator'); setPasswordError(false); }
+                else { setPasswordError(true); setPassword(''); setTimeout(() => setPasswordError(false), 500); }
             };
 
             const inputDigit = (digit) => {
-                if (waitingForNewValue) {
-                    setDisplay(String(digit));
-                    setWaitingForNewValue(false);
-                } else {
-                    setDisplay(display === '0' ? String(digit) : display + String(digit));
-                }
+                if (waitingForNewValue) { setDisplay(String(digit)); setWaitingForNewValue(false); }
+                else { setDisplay(display === '0' ? String(digit) : display + String(digit)); }
             };
 
-            const inputDot = () => {
-                if (waitingForNewValue) { setDisplay('0.'); setWaitingForNewValue(false); }
-                else if (!display.includes('.')) setDisplay(display + '.');
+            const handleEquals = () => {
+                if (display === '143') { setScreen('chat'); clear(); return; }
+                performOperation(null); setPrevValue(null);
             };
-
-            const clear = () => { setDisplay('0'); setPrevValue(null); setOperator(null); setWaitingForNewValue(false); };
 
             const performOperation = (nextOperator) => {
                 const inputValue = parseFloat(display);
-                if (prevValue === null) {
-                    setPrevValue(inputValue);
-                } else if (operator) {
-                    const currentValue = prevValue || 0;
-                    let newValue = currentValue;
+                if (prevValue === null) { setPrevValue(inputValue); }
+                else if (operator) {
+                    let newValue = prevValue;
                     if (operator === '+') newValue += inputValue;
                     if (operator === '-') newValue -= inputValue;
                     if (operator === '×') newValue *= inputValue;
                     if (operator === '÷') newValue /= inputValue;
-                    setPrevValue(newValue);
-                    setDisplay(String(newValue));
+                    setPrevValue(newValue); setDisplay(String(newValue));
                 }
-                setWaitingForNewValue(true);
-                setOperator(nextOperator);
+                setWaitingForNewValue(true); setOperator(nextOperator);
             };
 
-            const handleEquals = () => {
-                if (display === '143') {
-                    setScreen('chat');
-                    clear();
-                    return;
-                }
-                performOperation(null);
-                setPrevValue(null);
-            };
+            const clear = () => { setDisplay('0'); setPrevValue(null); setOperator(null); setWaitingForNewValue(false); };
 
-            const sendMessage = () => {
-                if (!messageInput.trim()) return;
+            const sendMessage = (type = 'text', content = messageInput) => {
+                const textToSend = content.trim();
+                if (!textToSend) return;
                 db.ref('messages').push({
                     sender: 'user',
-                    content: messageInput,
+                    type: type,
+                    content: textToSend,
                     timestamp: firebase.database.ServerValue.TIMESTAMP
                 });
-                setMessageInput('');
-            };
-
-            // Double Tap Control Fixed (Ab background par 2 baar dabaoge tabhi calculator khulega)
-            const handleDoubleTap = (e) => {
-                if (e.target.closest('button') || e.target.closest('input')) return;
                 
-                const now = Date.now();
-                const DOUBLE_PRESS_DELAY = 300;
-                if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
-                    setScreen('calculator');
-                }
-                lastTap.current = now;
+                // Send notification on new message
+                sendTelegramAlert(`📩 *Naya Message:* ${type === 'image' ? '📷 Photo' : textToSend}`);
+                
+                if (type === 'text') setMessageInput('');
             };
 
-            const handleActionAlert = (type) => {
-                alert(`${type} feature is connecting...`);
+            const handlePhotoSend = () => {
+                const url = prompt("Apni Photo ka Link (URL) yahan paste karein:");
+                if (url) sendMessage('image', url);
+            };
+
+            const startCall = (type) => {
+                setCallStatus('outgoing');
+                setCallType(type);
+                db.ref('currentCall').set({ status: 'active', type: type, by: 'user' });
+                sendTelegramAlert(`📞 *Call Alert:* Wo aapko ${type} Call milane ki koshish kar rahi hai!`);
+            };
+
+            const endCall = () => { setCallStatus(null); db.ref('currentCall').remove(); };
+
+            const handleScreenClick = (e) => {
+                if (e.target.closest('button') || e.target.closest('input')) return;
+                if (clickTimeout.current) {
+                    clearTimeout(clickTimeout.current);
+                    clickTimeout.current = null;
+                    setScreen('calculator'); 
+                } else {
+                    clickTimeout.current = setTimeout(() => { clickTimeout.current = null; }, 300); 
+                }
             };
 
             if (screen === 'password') {
@@ -168,8 +176,7 @@
                         <form onSubmit={handlePasswordSubmit} className="flex flex-col items-center gap-6">
                             <i className="fas fa-lock text-5xl text-neutral-600"></i>
                             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                className={`bg-transparent border-b text-white text-center text-2xl px-4 py-2 focus:outline-none transition-all ${passwordError ? 'border-red-500 animate-shake' : 'border-neutral-800'}`}
-                                placeholder="Passcode" autoFocus />
+                                class="bg-transparent border-b border-neutral-800 text-white text-center text-2xl px-4 py-2 focus:outline-none" placeholder="Passcode" autoFocus />
                         </form>
                     </div>
                 );
@@ -180,23 +187,19 @@
                     <div className="h-full w-full bg-black flex flex-col justify-end p-4 pb-10 max-w-sm mx-auto">
                         <div className="text-white text-7xl font-light text-right mb-6 px-4 truncate">{display}</div>
                         <div className="grid grid-cols-4 gap-3 w-full">
-                            <button onClick={clear} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-neutral-300">AC</button>
-                            <button onClick={() => setDisplay(String(parseFloat(display) * -1))} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-neutral-300">±</button>
-                            <button onClick={() => setDisplay(String(parseFloat(display) / 100))} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-neutral-300">%</button>
-                            <button onClick={() => performOperation('÷')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-orange-400">÷</button>
-                            
-                            {[7, 8, 9].map(num => <button key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-neutral-600">{num}</button>)}
-                            <button onClick={() => performOperation('×')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-orange-400">×</button>
-                            
-                            {[4, 5, 6].map(num => <button key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-neutral-600">{num}</button>)}
-                            <button onClick={() => performOperation('-')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-orange-400">−</button>
-                            
-                            {[1, 2, 3].map(num => <button key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-neutral-600">{num}</button>)}
-                            <button onClick={() => performOperation('+')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-orange-400">+</button>
-                            
-                            <button onClick={() => inputDigit(0)} className="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2 active:bg-neutral-600">0</button>
-                            <button onClick={inputDot} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-neutral-600">.</button>
-                            <button onClick={handleEquals} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center active:bg-orange-400">=</button>
+                            <button onClick={clear} class="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">AC</button>
+                            <button onClick={() => setDisplay(String(parseFloat(display) * -1))} class="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">±</button>
+                            <button onClick={() => setDisplay(String(parseFloat(display) / 100))} class="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">%</button>
+                            <button onClick={() => performOperation('÷')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">÷</button>
+                            {[7, 8, 9].map(num => <button key={num} onClick={() => inputDigit(num)} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
+                            <button onClick={() => performOperation('×')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">×</button>
+                            {[4, 5, 6].map(num => <button key={num} onClick={() => inputDigit(num)} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
+                            <button onClick={() => performOperation('-')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">−</button>
+                            {[1, 2, 3].map(num => <button key={num} onClick={() => inputDigit(num)} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
+                            <button onClick={() => performOperation('+')} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">+</button>
+                            <button onClick={inputDigit(0)} class="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2">0</button>
+                            <button onClick={() => { if (!display.includes('.')) setDisplay(display + '.'); }} class="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">.</button>
+                            <button onClick={handleEquals} class="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">=</button>
                         </div>
                     </div>
                 );
@@ -204,43 +207,51 @@
 
             if (screen === 'chat') {
                 return (
-                    <div className="h-full w-full bg-black flex flex-col relative" onTouchStart={handleDoubleTap} onClick={handleDoubleTap}>
-                        {/* Top Bar with Audio & Video Call Icons */}
+                    <div className="h-full w-full bg-black flex flex-col relative" onClick={handleScreenClick}>
+                        {callStatus && (
+                            <div className="absolute inset-0 bg-neutral-900 z-50 flex flex-col items-center justify-between p-12 text-white">
+                                <div className="text-center mt-10">
+                                    <div className="w-24 h-24 bg-blue-600 rounded-full mx-auto flex items-center justify-center text-4xl font-bold mb-4">M</div>
+                                    <h2 className="text-2xl font-semibold">My Love</h2>
+                                    <p className="text-sm text-neutral-400 mt-2 animate-pulse">{callStatus === 'incoming' ? `Incoming ${callType} Call...` : `Ringing (${callType} Call)...`}</p>
+                                </div>
+                                {callType === 'Video' && <div className="w-64 h-40 bg-zinc-800 rounded-xl flex items-center justify-center border border-neutral-700 text-neutral-500"><i className="fas fa-video text-3xl"></i></div>}
+                                <div className="flex gap-10 mb-10">
+                                    {callStatus === 'incoming' && <button onClick={() => setCallStatus('connected')} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone"></i></button>}
+                                    <button onClick={endCall} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone-slash"></i></button>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="bg-neutral-900 p-4 pt-10 flex items-center justify-between border-b border-neutral-800">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">M</div>
-                                <div>
-                                    <div className="text-white font-medium">My Love</div>
-                                    <div className="text-xs text-green-500">Online</div>
-                                </div>
+                                <div><div className="text-white font-medium">My Love</div><div className="text-xs text-green-500">Online</div></div>
                             </div>
                             <div className="flex items-center gap-5 text-xl text-blue-500 pr-2">
-                                <button onClick={() => handleActionAlert('Audio Call')} className="p-1 hover:text-blue-400"><i className="fas fa-phone"></i></button>
-                                <button onClick={() => handleActionAlert('Video Call')} className="p-1 hover:text-blue-400"><i className="fas fa-video"></i></button>
+                                <button onClick={() => startCall('Audio')} className="p-1"><i className="fas fa-phone"></i></button>
+                                <button onClick={() => startCall('Video')} className="p-1"><i className="fas fa-video"></i></button>
                             </div>
                         </div>
 
-                        {/* Messages Box */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-3">
                             {messages.map((msg, idx) => (
                                 <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${msg.sender === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-neutral-800 text-white rounded-bl-sm'}`}>
-                                        {msg.content}
+                                        {msg.type === 'image' ? <img src={msg.content} className="max-w-full rounded-lg my-1" alt="Sent" onError={(e)=>{e.target.src="https://placehold.co/200?text=Invalid+Image+URL"}}/> : msg.content}
                                     </div>
                                 </div>
                             ))}
                             <div ref={chatEndRef} />
                         </div>
 
-                        {/* Bottom Input with Photo Upload Icon */}
                         <div className="p-4 bg-neutral-900 border-t border-neutral-800 pb-8">
                             <div className="flex items-center gap-2">
-                                <button onClick={() => handleActionAlert('Photo Upload')} className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white">
+                                <button onClick={handlePhotoSend} className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400">
                                     <i className="fas fa-camera text-lg"></i>
                                 </button>
-                                <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
-                                    placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-2.5 rounded-full focus:outline-none" />
-                                <button onClick={sendMessage} className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white">
+                                <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-2.5 rounded-full focus:outline-none" />
+                                <button onClick={() => sendMessage('text')} className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white">
                                     <i className="fas fa-paper-plane"></i>
                                 </button>
                             </div>
@@ -249,9 +260,7 @@
                 );
             }
         }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 </html>

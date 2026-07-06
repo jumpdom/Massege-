@@ -1,317 +1,381 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Calculator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sumi ke liye Surprise</title>
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background-color: black; overflow: hidden; touch-action: none; user-select: none; }
-        #root { width: 100%; height: 100%; }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
-    <script type="text/babel">
-        // Firebase Config
-        const firebaseConfig = {
-          apiKey: "AIzaSyBHnQxGTZXvSlJj77TWGFJLpPRQm6n_xOU",
-          authDomain: "msg-jaan.firebaseapp.com",
-          databaseURL: "https://msg-jaan-default-rtdb.firebaseio.com",
-          projectId: "msg-jaan",
-          storageBucket: "msg-jaan.firebasestorage.app",
-          messagingSenderId: "188484227989",
-          appId: "1:188484227989:web:9e4ddf981d8f71a3ea9c9c"
-        };
+        @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Poppins:wght@300;600&display=swap');
 
-        // Telegram Config
-        const telegramConfig = {
-            botToken: "8866413029:AAEfY0jx9xzoDEc1bMoY9vsBevLLBMkjP2k", 
-            chatId: "8831398352"     
-        };
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #05010a; /* Ultra Dark background */
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Poppins', sans-serif;
+            perspective: 1000px; /* For 3D feel */
+        }
 
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-        const { useState, useEffect, useRef } = React;
+        #uiCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
 
-        function App() {
-            const [screen, setScreen] = useState('password');
-            const [password, setPassword] = useState('');
-            
-            // Calculator State
-            const [display, setDisplay] = useState('0');
-            const [equation, setEquation] = useState('');
-            const [isFinished, setIsFinished] = useState(false);
-            
-            // Chat State
-            const [messages, setMessages] = useState([]);
-            const [messageInput, setMessageInput] = useState('');
-            const [callStatus, setCallStatus] = useState(null); 
-            const [callType, setCallType] = useState('');
-            
-            const chatEndRef = useRef(null);
-            const lastTap = useRef(0); // Mobile double tap handle karne ke liye
+        /* Screen 1: Password */
+        #passwordScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: opacity 1.5s ease-out;
+        }
 
-            const sendTelegramAlert = (text) => {
-                const msg = encodeURIComponent(text);
-                const url = `https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage?chat_id=${telegramConfig.chatId}&text=${msg}&parse_mode=Markdown`;
-                fetch(url).catch(err => console.log(err));
-            };
+        .neon-title {
+            font-family: 'Dancing Script', cursive;
+            font-size: 5rem;
+            color: #fff;
+            text-align: center;
+            text-shadow:
+                0 0 7px #fff,
+                0 0 10px #fff,
+                0 0 21px #fff,
+                0 0 42px #ff00de, /* Pink Neon */
+                0 0 82px #ff00de,
+                0 0 92px #ff00de,
+                0 0 102px #ff00de,
+                0 0 151px #ff00de;
+            animation: pulsate 1.5s infinite alternate, flickInput 3s infinite;
+            margin-bottom: 2rem;
+        }
 
-            useEffect(() => {
-                if (screen === 'chat') {
-                    sendTelegramAlert("🚨 *Alert:* Jaan online aa gayi hai! Chat screen open ho chuki hai. ❤️");
-
-                    const messagesRef = db.ref('messages');
-                    messagesRef.on('value', (snapshot) => {
-                        const data = snapshot.val();
-                        if (data) {
-                            setMessages(Object.keys(data).map(key => data[key]));
-                        } else {
-                            setMessages([]); 
-                        }
-                    });
-
-                    const callRef = db.ref('currentCall');
-                    callRef.on('value', (snapshot) => {
-                        const callData = snapshot.val();
-                        if (callData && callData.status === 'active') {
-                            if (callData.by === 'admin') {
-                                setCallStatus('incoming');
-                                setCallType(callData.type);
-                            }
-                        } else {
-                            setCallStatus(null);
-                        }
-                    });
-
-                    return () => { messagesRef.off(); callRef.off(); };
-                }
-            }, [screen]);
-
-            useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
-            const handlePasswordSubmit = (e) => {
-                e.preventDefault();
-                if (password.toLowerCase() === "jaan") { 
-                    setScreen('calculator'); 
-                }
-                setPassword('');
-            };
-
-            // REAL CALCULATOR LOGIC
-            const inputDigit = (digit) => {
-                if (display === '0' || isFinished) {
-                    setDisplay(String(digit));
-                    setIsFinished(false);
-                } else {
-                    setDisplay(display + String(digit));
-                }
-            };
-
-            const inputDecimal = () => {
-                if (isFinished) {
-                    setDisplay('0.');
-                    setIsFinished(false);
-                    return;
-                }
-                if (!display.includes('.')) {
-                    setDisplay(display + '.');
-                }
-            };
-
-            const handleOperator = (op) => {
-                setEquation(display + ' ' + op + ' ');
-                setIsFinished(true);
-            };
-
-            const handleEquals = () => {
-                // Secret Code Check
-                if (display === '143') {
-                    setScreen('chat');
-                    clear();
-                    return;
-                }
-
-                if (!equation) return;
-
-                try {
-                    let finalExpression = equation + display;
-                    // Replace math symbols for eval
-                    finalExpression = finalExpression.replaceAll('×', '*').replaceAll('÷', '/');
-                    
-                    let result = eval(finalExpression);
-                    
-                    // Round if decimal to avoid long javascript precision errors
-                    if (result % 1 !== 0) {
-                        result = parseFloat(result.toFixed(6));
-                    }
-
-                    setDisplay(String(result));
-                    setEquation('');
-                    setIsFinished(true);
-                } catch (e) {
-                    setDisplay('Error');
-                    setEquation('');
-                    setIsFinished(true);
-                }
-            };
-
-            const clear = () => { 
-                setDisplay('0'); 
-                setEquation('');
-                setIsFinished(false);
-            };
-
-            const handleToggleSign = () => {
-                setDisplay(String(parseFloat(display) * -1));
-            };
-
-            const handlePercentage = () => {
-                setDisplay(String(parseFloat(display) / 100));
-            };
-
-            // CHAT FUNCTIONS
-            const sendMessage = () => {
-                const textToSend = messageInput.trim();
-                if (!textToSend) return;
-                db.ref('messages').push({
-                    sender: 'user',
-                    type: 'text',
-                    content: textToSend,
-                    timestamp: firebase.database.ServerValue.TIMESTAMP
-                });
-                sendTelegramAlert(`📩 *Naya Message:* ${textToSend}`);
-                setMessageInput('');
-            };
-
-            const startCall = (type) => {
-                setCallStatus('outgoing');
-                setCallType(type);
-                db.ref('currentCall').set({ status: 'active', type: type, by: 'user' });
-                sendTelegramAlert(`📞 *Call Alert:* Wo aapko ${type} Call milane ki koshish kar rahi hai!`);
-            };
-
-            const endCall = () => { setCallStatus(null); db.ref('currentCall').remove(); };
-
-            // MOBILE FRIENDLY PROPER DUAL TAP TO EXIT
-            const handleMobileDoubleTap = () => {
-                const now = Date.now();
-                const DOUBLE_PRESS_DELAY = 300; // 300ms window for double tap
-                if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
-                    // Safe Exit Logic Triggered
-                    db.ref('messages').remove();
-                    db.ref('currentCall').remove();
-                    sendTelegramAlert("🔒 *Safe Exit:* Screen par double tap karke chat ko secure kiya gaya.");
-                    setScreen('calculator');
-                    clear();
-                } else {
-                    lastTap.current = now;
-                }
-            };
-
-            if (screen === 'password') {
-                return (
-                    <div className="h-full w-full bg-black flex items-center justify-center">
-                        <form onSubmit={handlePasswordSubmit} className="flex flex-col items-center gap-6">
-                            <i className="fas fa-lock text-5xl text-neutral-600"></i>
-                            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                className="bg-transparent border-b border-neutral-800 text-white text-center text-2xl px-4 py-2 focus:outline-none" placeholder="Passcode" autoFocus />
-                        </form>
-                    </div>
-                );
+        @keyframes flickInput {
+            0%, 18%, 22%, 25%, 53%, 57%, 100% {
+                text-shadow: 0 0 7px #fff, 0 0 10px #fff, 0 0 21px #fff, 0 0 42px #ff00de, 0 0 82px #ff00de, 0 0 92px #ff00de, 0 0 102px #ff00de, 0 0 151px #ff00de;
             }
-
-            if (screen === 'calculator') {
-                return (
-                    <div className="h-full w-full bg-black flex flex-col justify-end p-4 pb-10 max-w-sm mx-auto">
-                        <div className="text-neutral-500 text-sm text-right px-4 h-6 truncate">{equation}</div>
-                        <div className="text-white text-7xl font-light text-right mb-6 px-4 truncate">{display}</div>
-                        <div className="grid grid-cols-4 gap-3 w-full">
-                            <button type="button" onClick={clear} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">AC</button>
-                            <button type="button" onClick={handleToggleSign} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">±</button>
-                            <button type="button" onClick={handlePercentage} className="bg-neutral-400 text-black text-3xl font-normal aspect-square rounded-full flex items-center justify-center">%</button>
-                            <button type="button" onClick={() => handleOperator('÷')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">÷</button>
-                            
-                            {[7, 8, 9].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button type="button" onClick={() => handleOperator('×')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">×</button>
-                            
-                            {[4, 5, 6].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button type="button" onClick={() => handleOperator('-')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">−</button>
-                            
-                            {[1, 2, 3].map(num => <button type="button" key={num} onClick={() => inputDigit(num)} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">{num}</button>)}
-                            <button type="button" onClick={() => handleOperator('+')} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">+</button>
-                            
-                            <button type="button" onClick={() => inputDigit(0)} className="bg-neutral-800 text-white text-3xl font-normal rounded-full flex items-center justify-start pl-8 col-span-2">0</button>
-                            <button type="button" onClick={inputDecimal} className="bg-neutral-800 text-white text-3xl font-normal aspect-square rounded-full flex items-center justify-center">.</button>
-                            <button type="button" onClick={handleEquals} className="bg-orange-500 text-white text-4xl font-normal aspect-square rounded-full flex items-center justify-center">=</button>
-                        </div>
-                    </div>
-                );
-            }
-
-            if (screen === 'chat') {
-                return (
-                    /* DUAL TAP RE-ENGINEERED FOR MOBILE PHONES */
-                    <div onClick={handleMobileDoubleTap} className="h-full w-full bg-black flex flex-col relative select-none">
-                        {callStatus && (
-                            <div className="absolute inset-0 bg-neutral-900 z-50 flex flex-col items-center justify-between p-12 text-white">
-                                <div className="text-center mt-10">
-                                    <div className="w-24 h-24 bg-blue-600 rounded-full mx-auto flex items-center justify-center text-4xl font-bold mb-4">M</div>
-                                    <h2 className="text-2xl font-semibold">My Love</h2>
-                                    <p className="text-sm text-neutral-400 mt-2 animate-pulse">{callStatus === 'incoming' ? `Incoming ${callType} Call...` : `Ringing (${callType} Call)...`}</p>
-                                </div>
-                                <div className="flex gap-10 mb-10">
-                                    {callStatus === 'incoming' && <button onClick={(e) => { e.stopPropagation(); setCallStatus('connected'); }} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone"></i></button>}
-                                    <button onClick={(e) => { e.stopPropagation(); endCall(); }} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-xl"><i className="fas fa-phone-slash"></i></button>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="bg-neutral-900 p-4 pt-10 flex items-center justify-between border-b border-neutral-800">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">M</div>
-                                <div><div className="text-white font-medium">My Love</div><div className="text-xs text-green-500">Online</div></div>
-                            </div>
-                            <div className="flex items-center gap-5 text-xl text-blue-500 pr-2">
-                                <button onClick={(e) => { e.stopPropagation(); startCall('Audio'); }} className="p-1"><i className="fas fa-phone"></i></button>
-                                <button onClick={(e) => { e.stopPropagation(); startCall('Video'); }} className="p-1"><i className="fas fa-video"></i></button>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                            {messages.map((msg, idx) => (
-                                <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${msg.sender === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-neutral-800 text-white rounded-bl-sm'}`}>
-                                        {msg.content}
-                                    </div>
-                                </div>
-                            ))}
-                            <div ref={chatEndRef} />
-                        </div>
-
-                        <div className="p-4 bg-neutral-900 border-t border-neutral-800 pb-8">
-                            <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
-                                <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Message..." className="flex-1 bg-neutral-800 text-white px-4 py-2.5 rounded-full focus:outline-none" />
-                                <button onClick={sendMessage} className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white">
-                                    <i className="fas fa-paper-plane"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
+            20%, 24%, 55% {
+                text-shadow: none;
+                opacity: 0.8;
             }
         }
 
-        const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container);
-        root.render(<App />);
+        #passwordField {
+            background: none;
+            border: 2px solid #ff00de;
+            border-radius: 25px;
+            padding: 15px 25px;
+            color: #fff;
+            font-size: 1.5rem;
+            text-align: center;
+            width: 300px;
+            box-shadow: 0 0 15px rgba(255, 0, 222, 0.7);
+            outline: none;
+            transition: box-shadow 0.3s;
+        }
+
+        #passwordField:focus {
+            box-shadow: 0 0 30px rgba(255, 0, 222, 1);
+        }
+
+        .neon-btn {
+            margin-top: 1.5rem;
+            background: none;
+            border: 2px solid #00f7ff; /* Blue Neon */
+            border-radius: 25px;
+            color: #00f7ff;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+            font-size: 1.2rem;
+            padding: 10px 30px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #00f7ff;
+            box-shadow: 0 0 15px rgba(0, 247, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .neon-btn:hover {
+            background: #00f7ff;
+            color: #05010a;
+            box-shadow: 0 0 40px rgba(0, 247, 255, 1);
+        }
+
+        /* Screen 2: Flower */
+        #flowerScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+            transition: opacity 1.5s ease-in;
+        }
+
+        #neonHibiscus {
+            font-size: 10rem;
+            cursor: pointer;
+            color: #ff3366; /* Realistic Hibiscus Red */
+            text-shadow:
+                0 0 10px #ff3366,
+                0 0 20px #ff3366,
+                0 0 40px #ff3366,
+                0 0 80px #ff0044; /* Darker Red halo */
+            animation: hibiscusFloat 4s ease-in-out infinite, hibiscusPulsate 2s infinite alternate;
+            transition: transform 0.2s ease-out, filter 0.2s ease-out;
+        }
+
+        #neonHibiscus:hover {
+            filter: brightness(1.3);
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        @keyframes hibiscusFloat {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(3deg); }
+        }
+
+        @keyframes hibiscusPulsate {
+            0% { text-shadow: 0 0 10px #ff3366, 0 0 20px #ff3366, 0 0 40px #ff3366, 0 0 80px #ff0044; }
+            100% { text-shadow: 0 0 15px #ff3366, 0 0 30px #ff3366, 0 0 60px #ff3366, 0 0 120px #ff0044; }
+        }
+
+        /* Screen 3: Boom! */
+        #boomScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+            transition: opacity 0.5s ease-in;
+        }
+
+        #proposeText {
+            font-family: 'Dancing Script', cursive;
+            font-size: 6rem;
+            color: #fff;
+            text-align: center;
+            line-height: 1.2;
+            text-shadow:
+                0 0 7px #fff,
+                0 0 10px #fff,
+                0 0 21px #fff,
+                0 0 42px #ff0000, /* Deep Red Neon */
+                0 0 82px #ff0000,
+                0 0 92px #ff0000,
+                0 0 102px #ff0000;
+            animation: textReveal 1.5s ease-out forwards;
+            opacity: 0;
+            transform: scale(0.5);
+        }
+
+        @keyframes textReveal {
+            0% { opacity: 0; transform: scale(0.5) rotate(-5deg); }
+            70% { opacity: 1; transform: scale(1.05) rotate(2deg); }
+            100% { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+
+        /* Utillity */
+        .fade-out { opacity: 0 !important; pointer-events: none; }
+        .fade-in { opacity: 1 !important; pointer-events: auto !important; }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="uiCanvas"></canvas>
+
+    <!-- Screen 1: Password -->
+    <div id="passwordScreen">
+        <h1 class="neon-title">Enter our code, Sumi...</h1>
+        <input type="text" id="passwordField" placeholder="?????" maxlength="9">
+        <button class="neon-btn" onclick="checkPassword()">Unlock</button>
+    </div>
+
+    <!-- Screen 2: Flower -->
+    <div id="flowerScreen">
+        <div id="neonHibiscus" onclick="triggerBoom()">🌺</div>
+    </div>
+
+    <!-- Screen 3: Boom! -->
+    <div id="boomScreen">
+        <h1 id="proposeText">I love you<br>Sumi darling</h1>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('uiCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let hearts = [];
+        let animationFrameId;
+
+        // Realistic Neon Particles
+        class Heart {
+            constructor(x, y, color, speed, size) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.baseColor = color;
+                this.speed = speed;
+                this.size = size;
+                this.angle = Math.random() * Math.PI * 2;
+                this.spin = (Math.random() - 0.5) * 0.1;
+                this.decay = 0.96 + Math.random() * 0.03;
+                this.alpha = 1;
+                this.blur = 15 + Math.random() * 10;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+
+                // Neon Glow Effect (Layered shadows)
+                ctx.shadowColor = this.baseColor;
+                ctx.shadowBlur = this.blur * this.alpha; // Glow scales with fade
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                ctx.fillStyle = '#fff'; // White core for realistic neon
+                ctx.beginPath();
+                // Classic heart path
+                const s = this.size * this.alpha;
+                ctx.moveTo(0, 0);
+                ctx.bezierCurveTo(-s / 2, -s / 2, -s, 0, 0, s);
+                ctx.bezierCurveTo(s, 0, s / 2, -s / 2, 0, 0);
+                ctx.fill();
+
+                // Secondary Glow layer
+                ctx.shadowBlur = this.blur * 2 * this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            update() {
+                // Move based on blast physics
+                this.x += Math.cos(this.angle) * this.speed * this.alpha;
+                this.y += Math.sin(this.angle) * this.speed * this.alpha + 0.5; // Slight gravity
+                this.angle += this.spin * this.alpha;
+                this.alpha *= this.decay; // Fade out
+            }
+        }
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 1. Check Password
+        function checkPassword() {
+            const pass = document.getElementById('passwordField').value.toLowerCase().trim();
+            if (pass === 'i love you') {
+                transitionToFlower();
+            } else {
+                // Flash red on wrong password
+                const input = document.getElementById('passwordField');
+                input.style.borderColor = '#ff0000';
+                input.style.boxShadow = '0 0 30px #ff0000';
+                setTimeout(() => {
+                    input.style.borderColor = '#ff00de';
+                    input.style.boxShadow = '0 0 15px rgba(255, 0, 222, 0.7)';
+                }, 500);
+            }
+        }
+
+        // Allow 'Enter' key
+        document.getElementById('passwordField').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                checkPassword();
+            }
+        });
+
+        // 2. Transition S1 -> S2
+        function transitionToFlower() {
+            document.getElementById('passwordScreen').classList.add('fade-out');
+            setTimeout(() => {
+                document.getElementById('passwordScreen').style.display = 'none';
+                document.getElementById('flowerScreen').classList.add('fade-in');
+            }, 1500);
+        }
+
+        // 3. Transition S2 -> S3 (THE BOOM)
+        function triggerBoom() {
+            document.getElementById('flowerScreen').classList.add('fade-out');
+            
+            // Create the Blast Particles
+            createBlast(width / 2, height / 2);
+
+            setTimeout(() => {
+                document.getElementById('flowerScreen').style.display = 'none';
+                document.getElementById('boomScreen').classList.add('fade-in');
+            }, 300); // Quick transition after click
+        }
+
+        function createBlast(startX, startY) {
+            hearts = [];
+            const particleCount = 150;
+            const colors = ['#ff00de', '#ff3366', '#ff0000', '#00f7ff']; // Neon Pink, Red, Blue
+
+            for (let i = 0; i < particleCount; i++) {
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const speed = 10 + Math.random() * 25; // Explosive speed
+                const size = 15 + Math.random() * 20;
+                hearts.push(new Heart(startX, startY, color, speed, size));
+            }
+
+            if (!animationFrameId) {
+                animate();
+            }
+        }
+
+        function animate() {
+            // Realistic trails
+            ctx.fillStyle = 'rgba(5, 1, 10, 0.3)'; 
+            ctx.fillRect(0, 0, width, height);
+
+            for (let i = hearts.length - 1; i >= 0; i--) {
+                hearts[i].update();
+                hearts[i].draw();
+
+                if (hearts[i].alpha < 0.01) {
+                    hearts.splice(i, 1);
+                }
+            }
+
+            if (hearts.length > 0) {
+                animationFrameId = requestAnimationFrame(animate);
+            } else {
+                animationFrameId = null;
+                // Optional: Clear canvas fully after animation ends
+                ctx.clearRect(0, 0, width, height);
+            }
+        }
+
     </script>
 </body>
 </html>
